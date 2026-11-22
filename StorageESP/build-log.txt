@@ -1,0 +1,44 @@
+﻿**********************
+Начало записи сценария Windows PowerShell
+Время начала: 20261122222811
+Имя пользователя: Nurgali\Aprol
+Запуск от имени пользователя: Nurgali\Aprol
+Имя конфигурации: 
+Компьютер: NURGALI (Microsoft Windows NT 10.0.26200.0)
+Ведущее приложение: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\Aprol\OneDrive\Рабочий стол\StorageESP\BUILD_MOD.ps1
+ИД процесса: 15756
+PSVersion: 5.1.26100.9818
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9818
+BuildVersion: 10.0.26100.9818
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[1/4] Checking Java 21 ...
+openjdk version "21.0.13.1" 2026-11-17 LTS
+OpenJDK Runtime Environment Temurin-21.0.13.1+2 (build 21.0.13.1+2-LTS)
+OpenJDK 64-Bit Server VM Temurin-21.0.13.1+2 (build 21.0.13.1+2-LTS, mixed mode, sharing)
+[2/4] Checking Gradle 9.5.0 ...
+[3/4] Building the Forge mod (first launch downloads Forge/Minecraft) ...
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.5.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+
+> Configure project :
+Minecraft Maven is up-to-date, took 0:03.127
+
+> Task :compileJava
+gradle.bat : C:\Users\Aprol\OneDrive\╨а╨░╨▒╨╛╤З╨╕╨╣ ╤Б╤В╨╛╨╗\StorageESP\src\main\java\com\example\storageesp\StorageEsp
+Client.java:58: warning: [removal] getBus(BusGroup) in RegisterKeyMappingsEvent has been deprecated and marked for remo
+val
+C:\Users\Aprol\OneDrive\Рабочий стол\StorageESP\BUILD_MOD.ps1:53 знак:9
++         & $dist build --no-daemon --stacktrace --console=plain 2>&1 | ...
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\Aprol\...ked for removal:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+        RegisterKeyMappingsEvent.getBus(modBus).addListener(StorageEspClient::onRegisterKeys);
+                                ^
+1 warning
+^C
