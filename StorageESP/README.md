@@ -1,29 +1,31 @@
-# Storage ESP · Liquid Glass
+# StorageESP 1.1.0 / Forge Minecraft 1.21.11
 
-Client-side Minecraft Forge mod project for Minecraft Java Edition **1.21.11**.
+This is SOURCE CODE, not a compiled mod JAR. Built on the previous working
+Forge 61.2.5 project. The previous screen crash fix is retained.
 
-- Forge: `61.2.5`
-- Java: 21 (JDK 21)
-- ForgeGradle: 7
-- Gradle: 9.5.0 (installed by GitHub Actions)
-- Open GUI: **Right Control**
-- Soft lavender / translucent Liquid Glass click GUI in `ModScreen.java`.
+## Changes
 
-## Build on GitHub — no IntelliJ required
+* Responsive ClickGUI: virtual 710 x 470 canvas, scaled to fit any GUI Scale.
+  Both drawing and clicks are transformed to the same coordinates.
+* Scrolling: mouse wheel vertically scrolls the module list; pressing the
+  middle mouse button scrolls down a page and wraps to top at the bottom.
+* Click a module's switch/card to toggle it; **right-click** Player ESP or
+  Storage ESP (or click its "НАСТРОИТЬ" button) to edit its detailed settings.
+* Player ESP options: health (HP label), tracer line, distance in meters.
+* Storage ESP option: tracer line to containers within 64 blocks.
+* Fullbright option under "МИР": client-side Night Vision lighting,
+  not a shader/gamma hack. This can have a different color tone from full gamma.
+* Saved settings in config/storageesp.properties.
 
-1. Upload the **contents of this extracted project folder** to the root of your GitHub repo, preserving `.github/workflows/build.yml` and `src/...` directory structure. Do **not** upload only the ZIP — GitHub does not unpack it automatically.
-2. GitHub Actions starts a build on every push to `main`. Open the **Actions** tab, then the **Build Storage ESP 1.21.11** workflow.
-3. When the job is green, open the run and download the **StorageESP-Forge-1.21.11** artifact under **Artifacts**. Unzip it to get the `.jar`.
+## Build
 
-If the build is red, open the failed step and share the build logs. The Java sources were ported from an earlier project and **have not yet been confirmed to compile** with the selected Forge API. Do not assume the JAR will be valid until the workflow succeeds and the mod is tested in-game.
+Forge 61.2.5 / Java 21 + JDK 25 for ForgeGradle / Gradle 9.5.0.
+Use the GitHub Actions workflow in .github/workflows/build.yml or BUILD_MOD.cmd.
+The new source has NOT yet been compiled or tested in Minecraft. Do not keep
+both old and new StorageESP jars in mods at the same time.
 
-## Notes
+## GUI / keyboard
 
-This repository uses the latest Liquid Glass GUI source from the supplied ZIP and replaces its older ForgeGradle 6 settings with the ForgeGradle 7 build format. All original feature classes are preserved.
-
-## Important compatibility notes
-
-- This is **Forge**, not Fabric. A Fabric 1.21.4 profile cannot load this mod.
-- For Minecraft **1.21.11**, use **Forge 61.2.5** and **Java 21**.
-- The build requires external downloads and the source has not been verified to compile in a complete Forge environment.
-- Do not rename the source ZIP to .jar: this does not build a mod.
+Right Ctrl: menu; wheel or middle-click: scroll; left-click: toggle;
+right-click on Player ESP / Storage ESP: configure; Esc: close.
+H/J/K/O: old feature hotkeys; M: create mark.

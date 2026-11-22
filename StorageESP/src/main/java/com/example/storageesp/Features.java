@@ -20,7 +20,8 @@ public enum Features {
     MARKS("Метки (призраки, смерть)", true),
     VOID_MAP("Карта пустот", false),
     TRACES("Следы активности", true),
-    PRICES("Ценники в ауке", true);
+    PRICES("Ценники в ауке", true),
+    FULLBRIGHT("Fullbright (ночное зрение)", false);
 
     public final String label;
     private boolean on;
@@ -47,6 +48,7 @@ public enum Features {
         } catch (IOException e) {
             return;
         }
+        EspSettings.load(props);
         for (Features f : values()) {
             String v = props.getProperty(f.name());
             if (v != null) f.on = Boolean.parseBoolean(v);

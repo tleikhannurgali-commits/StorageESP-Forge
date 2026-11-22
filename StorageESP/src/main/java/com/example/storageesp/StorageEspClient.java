@@ -20,6 +20,7 @@ import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
 import net.minecraft.world.level.block.entity.TrappedChestBlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
 import net.minecraft.resources.Identifier;
@@ -90,6 +91,8 @@ public class StorageEspClient {
         while (KEY_WARDEN.consumeClick())  toggle(mc, Features.WARDEN);
         while (KEY_MARK.consumeClick())    MarksTracker.addMark(mc);
 
+        FullbrightController.tick(mc);
+
         if (Features.ANTI_INVIS.on()) revealInvisiblePlayers(level);
         if (Features.PLAYERS.on()) drawPlayers(mc, level);
         if (Features.LOOT.on()) LootTracker.tick(mc, level);
@@ -119,6 +122,18 @@ public class StorageEspClient {
             // Союзники по команде — зелёные, остальные — красные
             int color = p.isAlliedTo(mc.player) ? 0xFF55FF55 : 0xFFFF3333;
             Gizmos.cuboid(p.getBoundingBox(), GizmoStyle.stroke(color, LINE_WIDTH)).setAlwaysOnTop();
+            if (EspSettings.playerTracer) {
+                Gizmos.line(mc.player.getEyePosition(), p.position().add(0.0, p.getBbHeight() * 0.5, 0.0), color, 1.8f)
+                        .setAlwaysOnTop();
+            }
+            int textRow = 0;
+            if (EspSettings.playerHealth) {
+                Gizmos.billboardTextOverMob(p, textRow++, "HP: " + Math.round(p.getHealth()), 0xFF8EFF86, 0.72f);
+            }
+            if (EspSettings.playerDistance) {
+                int meters = (int) Math.round(mc.player.distanceTo(p));
+                Gizmos.billboardTextOverMob(p, textRow, meters + " m", 0xFFFFFFFF, 0.72f);
+            }
         }
     }
 
@@ -137,6 +152,12 @@ public class StorageEspClient {
                     if (lootOn && LootTracker.isLooted(be.getBlockPos())) color = 0xFF777777;
                     AABB box = new AABB(be.getBlockPos()).inflate(0.002);
                     Gizmos.cuboid(box, GizmoStyle.stroke(color, LINE_WIDTH)).setAlwaysOnTop();
+                    if (EspSettings.storageTracer) {
+                        Vec3 target = Vec3.atCenterOf(be.getBlockPos());
+                        if (mc.player.getEyePosition().distanceToSqr(target) <= 64.0 * 64.0) {
+                            Gizmos.line(mc.player.getEyePosition(), target, color, 1.25f).setAlwaysOnTop();
+                        }
+                    }
                 }
             }
         }

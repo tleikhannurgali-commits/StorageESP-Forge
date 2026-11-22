@@ -1,476 +1,356 @@
 package com.example.storageesp;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 /**
- * Storage ESP ClickGUI — мягкая светло-серая тема с фиолетовыми акцентами.
- * В меню есть плавное появление, переходы вкладок, hover-анимации и тумблеры.
+ * Responsive StorageESP GUI for Minecraft 1.21.11.
+ * It renders on a fixed virtual canvas, scaled to the available screen size;
+ * mouse coordinates are transformed into the exact same virtual space.
+ * No manual blur call: the game already blurs screen backgrounds.
  */
-public class ModScreen extends Screen {
+public final class ModScreen extends Screen {
+    private static final int W = 710, H = 470;
+    private static final int CONTENT_X = 183, CONTENT_W = 499;
+    private static final int VIEW_Y = 133, VIEW_H = 270;
+    private static final int ROW_H = 66, ROW_STEP = 80;
 
-    // Полупрозрачное лавандовое стекло: альфа-канал оставляет фон видимым.
-    private static final int BG = 0xC9E7E2F1;
-    private static final int SIDE_BG = 0xB0D8D0EA;
-    private static final int CARD_BG = 0xA8FFFFFF;
-    private static final int CARD_HOVER = 0xB8E8DFFF;
-    private static final int TEXT = 0xFF342B45;
-    private static final int MUTED = 0xFF766D86;
-    private static final int PURPLE = 0xFF916BE0;
-    private static final int PURPLE_LIGHT = 0xFFD2C1FA;
-    private static final int LAVENDER = 0x77C6B2F4;
-    private static final int BORDER = 0xCFFFFFFF;
+    private static final int INK = 0xFF3D3051;
+    private static final int MUTED = 0xFF786C89;
+    private static final int VIOLET = 0xFF916AE2;
+    private static final int LILAC = 0xFFDDCEF8;
+    private static final int PALE = 0xE8EAE3F4;
+    private static final int LIGHT = 0xEFFFFFFF;
 
-    private static final String[] TAB_NAMES = {"ХРАНИЛИЩА", "ИГРОКИ", "МИР"};
-    private static final String[] TAB_HINTS = {
-            "Контейнеры, лут и цены",
-            "Игроки, радар и метки",
-            "Окружение и активность"
-    };
-    private static final Features[][] TABS = {
-            {Features.STORAGE, Features.LOOT, Features.WARDEN, Features.PRICES},
-            {Features.PLAYERS, Features.ANTI_INVIS, Features.RADAR, Features.MARKS},
-            {Features.VOID_MAP, Features.TRACES}
+    private static final String[] TABS = {"ХРАНИЛИЩА", "ИГРОКИ", "МИР"};
+    private static final Features[][] GROUPS = {
+        {Features.STORAGE, Features.LOOT, Features.WARDEN, Features.PRICES},
+        {Features.PLAYERS, Features.ANTI_INVIS, Features.RADAR, Features.MARKS},
+        {Features.VOID_MAP, Features.TRACES, Features.FULLBRIGHT}
     };
 
-    private int activeTab = 0;
-    private float openProgress = 0.0f;
-    private float tabProgress = 1.0f;
-    private float tabIndicatorY = -1.0f;
-    private float clearHover = 0.0f;
-    private float closeHover = 0.0f;
-    private final float[] tabHover = new float[TAB_NAMES.length];
-    private final float[] featureHover = new float[Features.values().length];
-    private final float[] toggleProgress = new float[Features.values().length];
-    private long lastFrameTime = 0L;
-    private float frameDelta = 1.0f / 60.0f;
+    private int activeTab;
+    private Features settingsFor;
+    private float scroll;
+    private float displayedScroll;
+    private float openAnim;
+    private long lastFrameTime;
 
     public ModScreen() {
         super(Component.literal("Storage ESP"));
-        for (Features f : Features.values()) {
-            toggleProgress[f.ordinal()] = f.on() ? 1.0f : 0.0f;
-        }
     }
 
-    private int panelWidth() { return Math.min(620, width - 28); }
-    private int panelHeight() { return Math.min(420, height - 24); }
-    private int panelX() { return (width - panelWidth()) / 2; }
-    private int panelY() { return (height - panelHeight()) / 2; }
-    private int sideWidth() { return 158; }
-    private int contentX() { return panelX() + sideWidth() + 26; }
-    private int contentWidth() { return panelWidth() - sideWidth() - 48; }
-    private int contentY() { return panelY() + 146; }
-    private int cardHeight() { return 82; }
-    private int cardGap() { return 12; }
-    private int cardWidth() { return (contentWidth() - cardGap()) / 2; }
+    private float uiScale() {
+        return Math.min(1.0f, Math.min((width - 18.0f) / W, (height - 18.0f) / H));
+    }
+
+    private float offsetX() { return (width - W * uiScale()) * 0.5f; }
+    private float offsetY() { return (height - H * uiScale()) * 0.5f; }
+    private double vx(double x) { return (x - offsetX()) / uiScale(); }
+    private double vy(double y) { return (y - offsetY()) / uiScale(); }
+    private static boolean in(double x, double y, int rx, int ry, int rw, int rh) {
+        return x >= rx && y >= ry && x < rx + rw && y < ry + rh;
+    }
+
+    private int rowCount() {
+        return settingsFor == Features.PLAYERS ? 3
+                : settingsFor == Features.STORAGE ? 1
+                : GROUPS[activeTab].length;
+    }
+
+    private float maxScroll() { return Math.max(0, rowCount() * ROW_STEP - VIEW_H + 4); }
+
+    private void resetScroll() { scroll = 0; displayedScroll = 0; }
 
     private void updateAnimations() {
         long now = System.currentTimeMillis();
-        if (lastFrameTime == 0L) lastFrameTime = now;
-        frameDelta = Math.min(0.05f, Math.max(0.001f, (now - lastFrameTime) / 1000.0f));
+        float dt = lastFrameTime == 0 ? 0.016f : Math.min(0.06f, (now - lastFrameTime) / 1000.0f);
         lastFrameTime = now;
-
-        openProgress = approach(openProgress, 1.0f, frameDelta, 12.0f);
-        tabProgress = approach(tabProgress, 1.0f, frameDelta, 9.5f);
-        for (Features f : Features.values()) {
-            int i = f.ordinal();
-            toggleProgress[i] = approach(toggleProgress[i], f.on() ? 1.0f : 0.0f, frameDelta, 15.0f);
-        }
+        float blend = 1.0f - (float) Math.exp(-12.0f * dt);
+        openAnim += (1.0f - openAnim) * blend;
+        displayedScroll += (scroll - displayedScroll) * blend;
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         updateAnimations();
-
-        // Настоящее размытие сцены средствами Screen, поверх него — лёгкая вуаль.
-        // Так фон мира остаётся различимым под полупрозрачными стеклянными панелями.
-        renderBlurredBackground(g);
-        int overlayAlpha = Math.round(0x52 * easeOut(openProgress));
-        g.fill(0, 0, width, height, (overlayAlpha << 24) | 0x00100B19);
-
-        float reveal = easeOut(openProgress);
-        float scale = 0.965f + 0.035f * reveal;
+        // Never call renderBlurredBackground here; it crashes 1.21.11 on repeated blur.
+        g.fill(0, 0, width, height, 0x440E0920);
+        float s = uiScale();
+        float ox = offsetX(), oy = offsetY();
+        double mx = vx(mouseX), my = vy(mouseY);
         g.pose().pushMatrix();
-        g.pose().translate(width / 2.0f, height / 2.0f);
-        g.pose().scale(scale, scale);
-        g.pose().translate(-width / 2.0f, -height / 2.0f);
+        g.pose().translate(ox, oy);
+        g.pose().scale(s, s);
 
-        drawPanel(g, mouseX, mouseY);
+        rect(g, 0, 0, W, H, 21, 0xD5FFFFFF);
+        rect(g, 3, 3, W - 6, H - 6, 19, PALE);
+        rect(g, 4, 4, 157, H - 8, 18, 0xD5DED2F1);
+        rect(g, 153, 4, 11, H - 8, 0, 0xD5DED2F1);
+        rect(g, 20, 23, 9, 30, 5, VIOLET);
+        rect(g, 33, 17, 9, 36, 5, 0xFFCEBBF6);
+        rect(g, 46, 29, 9, 24, 5, 0xFFA58BDC);
+        g.drawString(font, "STORAGE ESP", 68, 23, INK, false);
+        g.drawString(font, "FORGE 1.21.11    /    v1.1", 68, 40, MUTED, false);
+        rect(g, 547, 22, 139, 31, 14, 0xD7F7F2FF);
+        g.drawCenteredString(font, "VISUAL CONTROL", 616, 33, 0xFF7657A9);
+        g.fill(19, 68, W - 19, 69, 0x88FFFFFF);
 
+        drawSidebar(g, mx, my);
+        drawContent(g, mx, my);
+        drawFooter(g, mx, my);
         g.pose().popMatrix();
         super.render(g, mouseX, mouseY, partialTick);
     }
 
-    private void drawPanel(GuiGraphics g, int mouseX, int mouseY) {
-        int x = panelX();
-        int y = panelY();
-        int w = panelWidth();
-        int h = panelHeight();
-
-        // Мягкая внешняя тень и несколько слоёв стекла с тонкой светлой кромкой.
-        roundRect(g, x - 9, y - 5, w + 18, h + 22, 24, 0x180D0820);
-        roundRect(g, x - 4, y + 2, w + 8, h + 10, 21, 0x260D0820);
-        roundRect(g, x, y, w, h, 19, 0xBFFFFFFF);
-        roundRect(g, x + 1, y + 1, w - 2, h - 2, 18, BG);
-
-        // Стеклянная боковая панель и мягкие отражения на поверхности.
-        roundRect(g, x + 1, y + 1, sideWidth() + 4, h - 2, 18, SIDE_BG);
-        roundRect(g, x + sideWidth() - 7, y + 1, 10, h - 2, 5, SIDE_BG);
-        roundRect(g, x + 3, y + 2, w - 6, 34, 16, 0x26FFFFFF);
-        horizontalGradient(g, x + 20, y + 1, w - 40, 2, 0xBFFFFFFF, 0x3CBEA6F2);
-        roundRect(g, x + 2, y + 16, 2, h - 32, 1, 0x55FFFFFF);
-        roundRect(g, x + w - 4, y + 18, 1, h - 36, 1, 0x35FFFFFF);
-
-        drawHeader(g, x, y, w);
-        drawSidebar(g, mouseX, mouseY);
-        drawContent(g, mouseX, mouseY);
-        drawFooter(g, mouseX, mouseY);
+    private void drawSidebar(GuiGraphics g, double mx, double my) {
+        g.drawString(font, "РАЗДЕЛЫ", 20, 93, MUTED, false);
+        for (int t = 0; t < TABS.length; t++) {
+            int y = 119 + t * 56;
+            boolean active = t == activeTab;
+            boolean hover = in(mx, my, 13, y, 139, 44);
+            if (active || hover) rect(g, 12, y, 139, 44, 13, active ? 0xAFCAB9F0 : 0x81FFFFFF);
+            if (active) rect(g, 15, y + 8, 4, 28, 2, VIOLET);
+            g.drawString(font, t == 0 ? "ST" : t == 1 ? "PL" : "WR", 27, y + 18, active ? 0xFF7352C0 : MUTED, false);
+            g.drawString(font, TABS[t], 58, y + 18, active ? INK : MUTED, false);
+        }
+        g.fill(20, 305, 143, 306, 0x88FFFFFF);
+        g.drawString(font, "МОДУЛЕЙ", 23, 324, MUTED, false);
+        rect(g, 21, 346, 41, 26, 9, LILAC);
+        g.drawCenteredString(font, String.valueOf(Features.values().length), 41, 355, 0xFF6E55B4);
+        g.drawString(font, "в сборке", 68, 356, MUTED, false);
+        g.drawString(font, "ЛКМ - вкл/выкл", 19, H - 72, MUTED, false);
+        g.drawString(font, "ПКМ - настройки", 19, H - 55, MUTED, false);
     }
 
-    private void drawHeader(GuiGraphics g, int x, int y, int w) {
-        // Небольшой знак из мягких скруглённых полос.
-        roundRect(g, x + 20, y + 19, 7, 24, 4, PURPLE);
-        roundRect(g, x + 30, y + 13, 7, 30, 4, PURPLE_LIGHT);
-        roundRect(g, x + 40, y + 23, 7, 20, 4, 0xFFD2C5EF);
-
-        g.drawString(font, "STORAGE ESP", x + 59, y + 18, TEXT, false);
-        g.drawString(font, "VISUAL CONTROL CENTER  /  FORGE 1.21.11", x + 59, y + 33, MUTED, false);
-
-        int tagW = 92;
-        int tagX = x + w - tagW - 20;
-        roundOutline(g, tagX, y + 19, tagW, 23, 11, 0xAFFFFFFF, 0x88F8F4FF);
-        roundRect(g, tagX + 10, y + 28, 5, 5, 3, 0xFF8D70D1);
-        g.drawString(font, "CLIENT MOD", tagX + 22, y + 27, 0xFF76658E, false);
-        g.fill(x + 20, y + 59, x + w - 20, y + 60, 0xFFE3DFE9);
-    }
-
-    private void drawSidebar(GuiGraphics g, int mouseX, int mouseY) {
-        int x = panelX() + 15;
-        int labelY = panelY() + 83;
-        g.drawString(font, "РАЗДЕЛЫ", x + 9, labelY, 0xFF958DA1, false);
-
-        int itemY = labelY + 20;
-        int itemW = sideWidth() - 27;
-        for (int i = 0; i < TAB_NAMES.length; i++) {
-            int by = itemY + i * 51;
-            boolean selected = activeTab == i;
-            boolean hovered = inside(mouseX, mouseY, x, by, itemW, 42);
-            tabHover[i] = approach(tabHover[i], hovered ? 1.0f : 0.0f, frameDelta, 13.0f);
-
-            if (selected) {
-                float pulse = 0.5f + 0.5f * (float) Math.sin(System.currentTimeMillis() / 650.0);
-                roundRect(g, x, by, itemW, 42, 12, 0x78B99FEA);
-                roundRect(g, x + 1, by + 1, itemW - 2, 40, 11, 0x42FFFFFF);
-                roundRect(g, x + 5, by + 8, 3, 26, 2, PURPLE);
-                roundRect(g, x + 13, by + 9, 24, 24, 8, 0xA8D8CDEF);
-                g.drawCenteredString(font, tabIcon(i), x + 25, by + 17, 0xFF7657C0);
-                g.drawString(font, TAB_NAMES[i], x + 44, by + 16, TEXT, false);
-                if (pulse > 0.0f) roundRect(g, x + itemW - 12, by + 18, 4, 4, 2,
-                        withAlpha(PURPLE_LIGHT, 0.55f + pulse * 0.35f));
-            } else {
-                if (tabHover[i] > 0.01f) {
-                    roundRect(g, x, by, itemW, 42, 12,
-                            lerpColor(0x00000000, 0x88FFFFFF, tabHover[i] * 0.85f));
-                }
-                roundRect(g, x + 13, by + 9, 24, 24, 8,
-                        lerpColor(0x70E4E0EA, 0xA8ECE6F7, tabHover[i]));
-                g.drawCenteredString(font, tabIcon(i), x + 25, by + 17,
-                        lerpColor(0xFF9A94A5, 0xFF8266C2, tabHover[i]));
-                g.drawString(font, TAB_NAMES[i], x + 44, by + 16,
-                        lerpColor(0xFF817B8D, 0xFF514663, tabHover[i]), false);
-            }
+    private void drawContent(GuiGraphics g, double mx, double my) {
+        if (settingsFor == null) {
+            g.drawString(font, TABS[activeTab], CONTENT_X, 89, INK, false);
+            g.drawString(font, "Колесо мыши / СКМ - прокрутка", CONTENT_X, 107, MUTED, false);
+            int active = 0;
+            for (Features f : GROUPS[activeTab]) if (f.on()) active++;
+            String state = active + " / " + GROUPS[activeTab].length + " ON";
+            g.drawString(font, state, CONTENT_X + CONTENT_W - font.width(state) - 13, 91, 0xFF835CC2, false);
+        } else {
+            String title = settingsFor == Features.PLAYERS ? "PLAYER ESP" : "STORAGE ESP";
+            g.drawString(font, "НАСТРОЙКИ  /  " + title, CONTENT_X, 89, INK, false);
+            g.drawString(font, "Переключатели сохраняются автоматически", CONTENT_X, 107, MUTED, false);
         }
 
-        int dividerY = itemY + TAB_NAMES.length * 51 + 8;
-        g.fill(x + 8, dividerY, x + itemW - 8, dividerY + 1, 0xFFDFDAE7);
-        g.drawString(font, "МОДУЛЕЙ", x + 9, dividerY + 15, 0xFF958DA1, false);
-        roundRect(g, x + 8, dividerY + 33, 28, 24, 8, 0xFFE3DCF2);
-        g.drawCenteredString(font, String.valueOf(Features.values().length), x + 22, dividerY + 41, 0xFF7657C0);
-        g.drawString(font, "в проекте", x + 43, dividerY + 41, 0xFF898396, false);
-    }
+        g.enableScissor(CONTENT_X, VIEW_Y, CONTENT_X + CONTENT_W, VIEW_Y + VIEW_H);
+        int count = rowCount();
+        for (int i = 0; i < count; i++) {
+            int y = Math.round(VIEW_Y + i * ROW_STEP - displayedScroll);
+            if (y + ROW_H < VIEW_Y || y > VIEW_Y + VIEW_H) continue;
+            if (settingsFor == null) drawFeature(g, GROUPS[activeTab][i], y, mx, my);
+            else drawSetting(g, i, y, mx, my);
+        }
+        g.disableScissor();
 
-    private void drawContent(GuiGraphics g, int mouseX, int mouseY) {
-        int x = contentX();
-        int y = panelY() + 84;
-        float transition = easeOut(tabProgress);
-        int titleColor = fadeColor(TEXT, transition);
-        int hintColor = fadeColor(MUTED, transition);
-
-        g.drawString(font, TAB_NAMES[activeTab], x, y, titleColor, false);
-        g.drawString(font, TAB_HINTS[activeTab], x, y + 16, hintColor, false);
-
-        int enabled = 0;
-        for (Features f : TABS[activeTab]) if (f.on()) enabled++;
-        String state = enabled + " / " + TABS[activeTab].length + " АКТИВНО";
-        int stateX = panelX() + panelWidth() - 20 - font.width(state);
-        g.drawString(font, state, stateX, y + 2, fadeColor(0xFF8873B0, transition), false);
-
-        Features[] features = TABS[activeTab];
-        for (int i = 0; i < features.length; i++) {
-            int col = i % 2;
-            int row = i / 2;
-            int cx = x + col * (cardWidth() + cardGap());
-            int cy = contentY() + row * (cardHeight() + cardGap());
-            float entrance = clamp((tabProgress - i * 0.11f) / 0.58f);
-            entrance = easeOut(entrance);
-            int slide = Math.round((1.0f - entrance) * 8.0f);
-            drawFeatureCard(g, features[i], cx, cy + slide, cardWidth(), cardHeight(), mouseX, mouseY, entrance);
+        if (maxScroll() > 0) {
+            int railX = CONTENT_X + CONTENT_W - 5;
+            rect(g, railX, VIEW_Y, 3, VIEW_H, 2, 0x72B9ACD5);
+            int thumb = Math.max(26, Math.round(VIEW_H * VIEW_H / (VIEW_H + maxScroll())));
+            int thumbY = VIEW_Y + Math.round((VIEW_H - thumb) * displayedScroll / maxScroll());
+            rect(g, railX - 1, thumbY, 5, thumb, 3, VIOLET);
         }
     }
 
-    private void drawFeatureCard(GuiGraphics g, Features f, int x, int y, int w, int h,
-                                 int mouseX, int mouseY, float entrance) {
-        int index = f.ordinal();
-        boolean hovered = inside(mouseX, mouseY, x, y, w, h);
-        featureHover[index] = approach(featureHover[index], hovered ? 1.0f : 0.0f, frameDelta, 15.0f);
-        float hover = featureHover[index];
-        float enabled = toggleProgress[index];
-
-        int cardColor = fadeColor(lerpColor(CARD_BG, CARD_HOVER, hover), entrance);
-        int borderColor = fadeColor(lerpColor(BORDER, 0xC8D8C3F4, hover), entrance);
-        roundOutline(g, x, y, w, h, 13, borderColor, cardColor);
-        // Тонкий блик на верхней кромке создаёт эффект стеклянной поверхности.
-        roundRect(g, x + 3, y + 2, w - 6, 11, 8, fadeColor(0x32FFFFFF, entrance));
-        roundRect(g, x + 2, y + 15, 1, h - 30, 1, fadeColor(0x35FFFFFF, entrance));
-
-        // Иконка с мягкой полупрозрачной подложкой.
-        int iconX = x + 12;
-        int iconY = y + 23;
-        roundRect(g, iconX, iconY, 35, 35, 12,
-                fadeColor(lerpColor(0x92EDE9F3, LAVENDER, Math.max(hover, enabled * 0.8f)), entrance));
-        g.drawCenteredString(font, iconFor(f), iconX + 17, iconY + 13,
-                fadeColor(lerpColor(0xFF8D879A, 0xFF7556BE, enabled), entrance));
-
-        int tx = x + 57;
-        int titleColor = fadeColor(lerpColor(TEXT, 0xFF59447F, enabled * 0.55f), entrance);
-        int descColor = fadeColor(MUTED, entrance);
-        g.drawString(font, shortName(f), tx, y + 25, titleColor, false);
-        g.drawString(font, description(f), tx, y + 42, descColor, false);
-
-        // Анимированный тумблер: бегунок плавно переезжает между состояниями.
-        int switchW = 36;
-        int switchH = 20;
-        int sx = x + w - switchW - 12;
-        int sy = y + 11;
-        int track = fadeColor(lerpColor(0xFFE0DCE6, PURPLE, enabled), entrance);
-        roundRect(g, sx, sy, switchW, switchH, 10, track);
-        int knobX = sx + 2 + Math.round(enabled * 16.0f);
-        roundRect(g, knobX - 1, sy + 1, 18, 18, 9, fadeColor(0x2A3B2A50, entrance));
-        roundRect(g, knobX, sy + 1, 16, 16, 8, fadeColor(0xFFFFFFFF, entrance));
-
-        String state = f.on() ? "АКТИВНО" : "ВЫКЛЮЧЕНО";
-        g.drawString(font, state, sx - font.width(state) - 8, sy + 6,
-                fadeColor(f.on() ? 0xFF8063C1 : 0xFFA29CAC, entrance), false);
+    private void drawFeature(GuiGraphics g, Features f, int y, double mx, double my) {
+        boolean hover = in(mx, my, CONTENT_X, y, CONTENT_W - 14, ROW_H);
+        rect(g, CONTENT_X, y, CONTENT_W - 14, ROW_H, 14, hover ? 0xF6FFFFFF : LIGHT);
+        rect(g, CONTENT_X + 12, y + 13, 42, 40, 13, f.on() ? 0xC9D7C3F7 : 0xA8E6E0EC);
+        g.drawCenteredString(font, icon(f), CONTENT_X + 33, y + 29, f.on() ? 0xFF7652C2 : MUTED);
+        g.drawString(font, name(f), CONTENT_X + 65, y + 16, INK, false);
+        g.drawString(font, subtitle(f), CONTENT_X + 65, y + 36, MUTED, false);
+        boolean hasOptions = f == Features.STORAGE || f == Features.PLAYERS;
+        if (hasOptions) {
+            rect(g, CONTENT_X + CONTENT_W - 179, y + 36, 91, 19, 8, 0xE6E5D9F8);
+            g.drawCenteredString(font, "НАСТРОИТЬ", CONTENT_X + CONTENT_W - 134, y + 42, 0xFF7354AC);
+        }
+        drawSwitch(g, CONTENT_X + CONTENT_W - 76, y + 12, f.on());
     }
 
-    private void drawFooter(GuiGraphics g, int mouseX, int mouseY) {
-        int x = panelX();
-        int y = panelY() + panelHeight() - 55;
-        int w = panelWidth();
-        g.fill(x + 20, y, x + w - 20, y + 1, 0xFFE3DFE9);
-        g.drawString(font, "RIGHT CTRL  ·  МЕНЮ", x + 22, y + 19, 0xFF918A9D, false);
-        g.drawString(font, "ESC  ·  ЗАКРЫТЬ", x + 22, y + 33, 0xFFAAA4B4, false);
+    private void drawSetting(GuiGraphics g, int index, int y, double mx, double my) {
+        boolean player = settingsFor == Features.PLAYERS;
+        String label = player ? switch (index) {
+            case 0 -> "Здоровье игроков";
+            case 1 -> "Линии к игрокам";
+            default -> "Дистанция в метрах";
+        } : "Линии к хранилищам";
+        String subtitle = player ? switch (index) {
+            case 0 -> "HP над игроками";
+            case 1 -> "От твоей камеры к игроку";
+            default -> "Расстояние над игроком, м";
+        } : "От камеры к контейнерам до 64 м";
+        boolean value = settingValue(index);
+        boolean hover = in(mx, my, CONTENT_X, y, CONTENT_W - 14, ROW_H);
+        rect(g, CONTENT_X, y, CONTENT_W - 14, ROW_H, 14, hover ? 0xF6FFFFFF : LIGHT);
+        rect(g, CONTENT_X + 13, y + 13, 41, 40, 12, 0xC6DDD0F7);
+        g.drawCenteredString(font, player ? index == 0 ? "HP" : index == 1 ? "LN" : "M" : "LN",
+                CONTENT_X + 33, y + 29, 0xFF7458B4);
+        g.drawString(font, label, CONTENT_X + 65, y + 16, INK, false);
+        g.drawString(font, subtitle, CONTENT_X + 65, y + 36, MUTED, false);
+        drawSwitch(g, CONTENT_X + CONTENT_W - 76, y + 22, value);
+    }
 
-        int closeW = 88;
-        int clearW = 146;
-        int closeX = x + w - 20 - closeW;
-        int clearX = closeX - 10 - clearW;
-        int by = y + 8;
-        clearHover = approach(clearHover, inside(mouseX, mouseY, clearX, by, clearW, 31) ? 1.0f : 0.0f,
-                frameDelta, 14.0f);
-        closeHover = approach(closeHover, inside(mouseX, mouseY, closeX, by, closeW, 31) ? 1.0f : 0.0f,
-                frameDelta, 14.0f);
+    private void drawFooter(GuiGraphics g, double mx, double my) {
+        g.fill(178, 417, 687, 418, 0x9FFFFFFF);
+        rect(g, CONTENT_X, 428, 145, 30, 12, 0xD2E2D5F5);
+        g.drawCenteredString(font, settingsFor == null ? "СБРОС МЕТОК" : "НАЗАД", CONTENT_X + 72, 439, 0xFF7155AD);
+        rect(g, CONTENT_X + CONTENT_W - 117, 428, 116, 30, 12, 0xC4C8B4F2);
+        g.drawCenteredString(font, "ГОТОВО", CONTENT_X + CONTENT_W - 59, 439, 0xFF55338A);
+        g.drawString(font, "RIGHT CTRL - MENU", CONTENT_X + 159, 440, MUTED, false);
+    }
 
-        roundOutline(g, clearX, by, clearW, 31, 12,
-                lerpColor(0xAFFFFFFF, 0xD3C5ED, clearHover),
-                lerpColor(0x79FFFFFF, 0xA8EFE9F8, clearHover));
-        g.drawCenteredString(font, "ОЧИСТИТЬ ТРЕКЕРЫ", clearX + clearW / 2, by + 11,
-                lerpColor(0xFF80798D, 0xFF6D52A9, clearHover));
+    private static void drawSwitch(GuiGraphics g, int x, int y, boolean value) {
+        rect(g, x, y, 47, 24, 12, value ? VIOLET : 0xFFC8C1D0);
+        rect(g, x + (value ? 25 : 3), y + 3, 18, 18, 9, 0xFFFFFFFF);
+    }
 
-        roundOutline(g, closeX, by, closeW, 31, 12,
-                lerpColor(0xAEBBA9E1, PURPLE, closeHover),
-                lerpColor(0x8CECE5F8, 0xB5E1D6F4, closeHover));
-        g.drawCenteredString(font, "ГОТОВО", closeX + closeW / 2, by + 11,
-                lerpColor(0xFF765BAF, 0xFF6345A5, closeHover));
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        double x = vx(mouseX), y = vy(mouseY);
+        if (in(x, y, CONTENT_X, VIEW_Y, CONTENT_W, VIEW_H)) {
+            scroll = Math.max(0, Math.min(maxScroll(), scroll - (float) verticalAmount * 46f));
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        double mouseX = event.x();
-        double mouseY = event.y();
+        double x = vx(event.x()), y = vy(event.y());
         int button = event.button();
-        if (button != 0) return super.mouseClicked(event, doubleClick);
-
-        int sx = panelX() + 15;
-        int sy = panelY() + 83 + 20;
-        for (int i = 0; i < TAB_NAMES.length; i++) {
-            int by = sy + i * 51;
-            if (inside(mouseX, mouseY, sx, by, sideWidth() - 27, 42)) {
-                if (activeTab != i) {
-                    activeTab = i;
-                    tabProgress = 0.0f;
-                }
-                return true;
-            }
-        }
-
-        Features[] features = TABS[activeTab];
-        for (int i = 0; i < features.length; i++) {
-            int cx = contentX() + (i % 2) * (cardWidth() + cardGap());
-            int cy = contentY() + (i / 2) * (cardHeight() + cardGap());
-            if (inside(mouseX, mouseY, cx, cy, cardWidth(), cardHeight())) {
-                features[i].toggle();
-                Features.save();
-                return true;
-            }
-        }
-
-        int footerY = panelY() + panelHeight() - 55 + 8;
-        int closeX = panelX() + panelWidth() - 20 - 88;
-        int clearX = closeX - 10 - 146;
-        if (inside(mouseX, mouseY, clearX, footerY, 146, 31)) {
-            MarksTracker.clear();
-            LootTracker.clear();
+        // Middle mouse button: move down one page; at the bottom return to the top.
+        if (button == 2 && in(x, y, CONTENT_X, VIEW_Y, CONTENT_W, VIEW_H)) {
+            scroll = scroll >= maxScroll() - 1 ? 0 : Math.min(maxScroll(), scroll + VIEW_H * 0.72f);
             return true;
         }
-        if (inside(mouseX, mouseY, closeX, footerY, 88, 31)) {
+        if (button != 0 && button != 1) return super.mouseClicked(event, doubleClick);
+
+        for (int t = 0; t < TABS.length; t++) {
+            if (button == 0 && in(x, y, 13, 119 + t * 56, 139, 44)) {
+                activeTab = t;
+                settingsFor = null;
+                resetScroll();
+                return true;
+            }
+        }
+        if (button == 0 && in(x, y, CONTENT_X, 428, 145, 30)) {
+            if (settingsFor != null) settingsFor = null;
+            else { MarksTracker.clear(); LootTracker.clear(); }
+            resetScroll();
+            return true;
+        }
+        if (button == 0 && in(x, y, CONTENT_X + CONTENT_W - 117, 428, 116, 30)) {
             onClose();
             return true;
         }
-
+        if (in(x, y, CONTENT_X, VIEW_Y, CONTENT_W - 14, VIEW_H)) {
+            int i = (int) ((y - VIEW_Y + displayedScroll) / ROW_STEP);
+            if (i < 0 || i >= rowCount()) return true;
+            int rowY = Math.round(VIEW_Y + i * ROW_STEP - displayedScroll);
+            if (!in(x, y, CONTENT_X, rowY, CONTENT_W - 14, ROW_H)) return true;
+            if (settingsFor != null) {
+                if (button == 0) { toggleSetting(i); Features.save(); }
+                return true;
+            }
+            Features f = GROUPS[activeTab][i];
+            if ((button == 1 || x >= CONTENT_X + CONTENT_W - 185 && x < CONTENT_X + CONTENT_W - 83 && y > rowY + 32)
+                    && (f == Features.PLAYERS || f == Features.STORAGE)) {
+                settingsFor = f;
+                resetScroll();
+                return true;
+            }
+            if (button == 0) { f.toggle(); Features.save(); }
+            return true;
+        }
         return super.mouseClicked(event, doubleClick);
     }
 
-    @Override
-    public boolean isPauseScreen() { return false; }
-
-    @Override
-    public void onClose() {
-        Features.save();
-        super.onClose();
+    private boolean settingValue(int i) {
+        if (settingsFor == Features.STORAGE) return EspSettings.storageTracer;
+        return switch (i) {
+            case 0 -> EspSettings.playerHealth;
+            case 1 -> EspSettings.playerTracer;
+            default -> EspSettings.playerDistance;
+        };
     }
 
-    private static void roundOutline(GuiGraphics g, int x, int y, int w, int h, int radius,
-                                     int outline, int fill) {
-        roundRect(g, x, y, w, h, radius, outline);
-        roundRect(g, x + 1, y + 1, w - 2, h - 2, Math.max(1, radius - 1), fill);
-    }
-
-    /** Рисует скруглённый прямоугольник небольшим числом горизонтальных полос. */
-    private static void roundRect(GuiGraphics g, int x, int y, int w, int h, int radius, int color) {
-        if (w <= 0 || h <= 0) return;
-        int r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
-        if (r == 0) {
-            g.fill(x, y, x + w, y + h, color);
-            return;
+    private void toggleSetting(int i) {
+        if (settingsFor == Features.STORAGE) { EspSettings.storageTracer = !EspSettings.storageTracer; return; }
+        switch (i) {
+            case 0 -> EspSettings.playerHealth = !EspSettings.playerHealth;
+            case 1 -> EspSettings.playerTracer = !EspSettings.playerTracer;
+            default -> EspSettings.playerDistance = !EspSettings.playerDistance;
         }
+    }
 
+    @Override public boolean isPauseScreen() { return false; }
+    @Override public void onClose() { Features.save(); super.onClose(); }
+
+    private static String icon(Features f) {
+        return switch (f) {
+            case STORAGE -> "ST";
+            case LOOT -> "LT";
+            case WARDEN -> "WD";
+            case PRICES -> "$";
+            case PLAYERS -> "PL";
+            case ANTI_INVIS -> "AI";
+            case RADAR -> "RD";
+            case MARKS -> "MK";
+            case VOID_MAP -> "VM";
+            case TRACES -> "TR";
+            case FULLBRIGHT -> "FB";
+        };
+    }
+    private static String name(Features f) {
+        return switch (f) {
+            case STORAGE -> "Storage ESP";
+            case LOOT -> "Loot Tracker";
+            case WARDEN -> "Warden Tracker";
+            case PRICES -> "Price Tags";
+            case PLAYERS -> "Player ESP";
+            case ANTI_INVIS -> "Anti-Invis";
+            case RADAR -> "Player Radar";
+            case MARKS -> "Marks & Ghosts";
+            case VOID_MAP -> "Void Map";
+            case TRACES -> "Activity Traces";
+            case FULLBRIGHT -> "Fullbright";
+        };
+    }
+    private static String subtitle(Features f) {
+        return switch (f) {
+            case STORAGE -> "Контейнеры через стены";
+            case LOOT -> "Уже открытые сундуки";
+            case WARDEN -> "Сундуки без таймера";
+            case PRICES -> "Цены предметов на аукционе";
+            case PLAYERS -> "Рамки, здоровье, линии, метры";
+            case ANTI_INVIS -> "Видимость невидимых";
+            case RADAR -> "Игроки на мини-карте";
+            case MARKS -> "Метки, призраки, смерть";
+            case VOID_MAP -> "Поиск прямых тоннелей";
+            case TRACES -> "Отметки по звукам";
+            case FULLBRIGHT -> "Ночное зрение без команд";
+        };
+    }
+
+    /** Rounded rectangle without textures or shader dependencies. */
+    private static void rect(GuiGraphics g, int x, int y, int w, int h, int radius, int color) {
+        if (w < 1 || h < 1) return;
+        int r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+        if (r == 0) { g.fill(x, y, x + w, y + h, color); return; }
         g.fill(x + r, y, x + w - r, y + h, color);
         g.fill(x, y + r, x + r, y + h - r, color);
         g.fill(x + w - r, y + r, x + w, y + h - r, color);
         for (int row = 0; row < r; row++) {
             double dy = r - row - 0.5;
-            int inset = (int) Math.ceil(r - Math.sqrt(Math.max(0.0, r * r - dy * dy)));
+            int inset = (int) Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)));
             g.fill(x + inset, y + row, x + w - inset, y + row + 1, color);
             g.fill(x + inset, y + h - row - 1, x + w - inset, y + h - row, color);
         }
-    }
-
-    private static void horizontalGradient(GuiGraphics g, int x, int y, int w, int h, int start, int end) {
-        for (int i = 0; i < w; i++) {
-            float t = w <= 1 ? 0.0f : (float) i / (w - 1);
-            g.fill(x + i, y, x + i + 1, y + h, lerpColor(start, end, t));
-        }
-    }
-
-    private static float approach(float current, float target, float delta, float speed) {
-        float amount = 1.0f - (float) Math.exp(-speed * delta);
-        return current + (target - current) * amount;
-    }
-
-    private static float easeOut(float t) {
-        t = clamp(t);
-        float inv = 1.0f - t;
-        return 1.0f - inv * inv * inv;
-    }
-
-    private static float clamp(float value) { return Math.max(0.0f, Math.min(1.0f, value)); }
-
-    private static int fadeColor(int color, float alpha) {
-        int a = (color >>> 24) & 255;
-        int scaled = Math.round(a * clamp(alpha));
-        return (color & 0x00FFFFFF) | (scaled << 24);
-    }
-
-    private static int withAlpha(int color, float alpha) { return fadeColor(color, alpha); }
-
-    private static int lerpColor(int a, int b, float t) {
-        t = clamp(t);
-        int aa = (a >>> 24) & 255, ar = (a >>> 16) & 255, ag = (a >>> 8) & 255, ab = a & 255;
-        int ba = (b >>> 24) & 255, br = (b >>> 16) & 255, bg = (b >>> 8) & 255, bb = b & 255;
-        int alpha = Math.round(aa + (ba - aa) * t);
-        int red = Math.round(ar + (br - ar) * t);
-        int green = Math.round(ag + (bg - ag) * t);
-        int blue = Math.round(ab + (bb - ab) * t);
-        return (alpha << 24) | (red << 16) | (green << 8) | blue;
-    }
-
-    private static boolean inside(double mx, double my, int x, int y, int w, int h) {
-        return mx >= x && mx < x + w && my >= y && my < y + h;
-    }
-
-    private static String tabIcon(int tab) {
-        return switch (tab) {
-            case 0 -> "ST";
-            case 1 -> "PL";
-            default -> "WR";
-        };
-    }
-
-    private static String shortName(Features f) {
-        return switch (f) {
-            case STORAGE -> "Storage ESP";
-            case PLAYERS -> "Player ESP";
-            case ANTI_INVIS -> "Anti-Invis";
-            case WARDEN -> "Warden Tracker";
-            case LOOT -> "Loot Tracker";
-            case RADAR -> "Player Radar";
-            case MARKS -> "Marks";
-            case VOID_MAP -> "Void Map";
-            case TRACES -> "Activity Traces";
-            case PRICES -> "Price Tags";
-        };
-    }
-
-    private static String description(Features f) {
-        return switch (f) {
-            case STORAGE -> "Контейнеры и блоки";
-            case PLAYERS -> "Контуры игроков";
-            case ANTI_INVIS -> "Видимость невидимых";
-            case WARDEN -> "Открытые хранилища";
-            case LOOT -> "Уже проверенный лут";
-            case RADAR -> "Позиции поблизости";
-            case MARKS -> "Точки и смерть";
-            case VOID_MAP -> "Подземные пустоты";
-            case TRACES -> "Звуковая активность";
-            case PRICES -> "Информация о цене";
-        };
-    }
-
-    private static String iconFor(Features f) {
-        return switch (f) {
-            case STORAGE -> "ST";
-            case PLAYERS -> "PL";
-            case ANTI_INVIS -> "AI";
-            case WARDEN -> "WD";
-            case LOOT -> "LT";
-            case RADAR -> "RD";
-            case MARKS -> "MK";
-            case VOID_MAP -> "VM";
-            case TRACES -> "TR";
-            case PRICES -> "$";
-        };
     }
 }
