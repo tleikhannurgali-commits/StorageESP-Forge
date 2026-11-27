@@ -9,6 +9,12 @@ import net.minecraft.gizmos.GizmoStyle;
 import net.minecraft.gizmos.Gizmos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.DyeColor;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -42,6 +48,10 @@ public class StorageEspClient {
     /** Радиус поиска хранилищ в чанках (6 чанков = 96 блоков). */
     private static final int RANGE_CHUNKS = 6;
     private static final float LINE_WIDTH = 2.5f;
+    private static Object storageWorld;
+    private static List<net.minecraft.core.BlockPos> nearbyStorage = List.of();
+    private static int storageTick;
+    private static int scanCx = Integer.MIN_VALUE, scanCz = Integer.MIN_VALUE;
 
     private static final KeyMapping KEY_MENU = key("menu", GLFW.GLFW_KEY_RIGHT_CONTROL);
     private static final KeyMapping KEY_STORAGE = key("storage", GLFW.GLFW_KEY_H);
@@ -116,49 +126,126 @@ public class StorageEspClient {
         }
     }
 
+    /** Refresh live entities each tick; do not draw a player who is removed, dead, or absent from the level. */
     private static void drawPlayers(Minecraft mc, ClientLevel level) {
+        Vec3 camera = mc.player.getEyePosition().add(mc.player.getLookAngle().scale(1.15));
         for (AbstractClientPlayer p : level.players()) {
-            if (p == mc.player) continue;
-            // Союзники по команде — зелёные, остальные — красные
-            int color = p.isAlliedTo(mc.player) ? 0xFF55FF55 : 0xFFFF3333;
-            Gizmos.cuboid(p.getBoundingBox(), GizmoStyle.stroke(color, LINE_WIDTH)).setAlwaysOnTop();
-            if (EspSettings.playerTracer) {
-                Gizmos.line(mc.player.getEyePosition(), p.position().add(0.0, p.getBbHeight() * 0.5, 0.0), color, 1.8f)
-                        .setAlwaysOnTop();
+            if (p == mc.player || p.isRemoved() || !p.isAlive() || p.isSpectator()) continue;
+            if (level.getEntity(p.getId()) != p) continue;
+            if (mc.player.distanceToSqr(p) > 128.0 * 128.0) continue;
+
+            int color = p.isAlliedTo(mc.player) ? 0xFF60E5A2 : 0xFFFF6782;
+            Gizmos.cuboid(p.getBoundingBox().inflate(0.025), GizmoStyle.stroke(color, 2.2f))
+                    .setAlwaysOnTop();
+
+            Vec3 target = p.position().add(0.0, p.getBbHeight() * 0.52, 0.0);
+            if (EspSettings.playerTracer && camera.distanceToSqr(target) > 1.0) {
+                drawTracer(camera, target, color, 3.0f);
             }
-            int textRow = 0;
+
+            int row = 0;
             if (EspSettings.playerHealth) {
-                Gizmos.billboardTextOverMob(p, textRow++, "HP: " + Math.round(p.getHealth()), 0xFF8EFF86, 0.72f);
+                float hp = Math.max(0.0f, p.getHealth());
+                float maxHp = Math.max(1.0f, p.getMaxHealth());
+                int filled = Math.max(0, Math.min(6, Math.round(6.0f * hp / maxHp)));
+                int hpColor = hp / maxHp > 0.60f ? 0xFF61ED8E : hp / maxHp > 0.28f ? 0xFFFFCE63 : 0xFFFF677F;
+                String bar = "▰".repeat(filled) + "▱".repeat(6 - filled);
+                Gizmos.billboardTextOverMob(p, row++, "❤ " + Math.round(hp) + "/" + Math.round(maxHp) + " " + bar,
+                        hpColor, 0.56f);
+            }
+            if (EspSettings.playerArmor) {
+                boolean head = equipped(p, EquipmentSlot.HEAD);
+                boolean chest = equipped(p, EquipmentSlot.CHEST);
+                boolean legs = equipped(p, EquipmentSlot.LEGS);
+                boolean feet = equipped(p, EquipmentSlot.FEET);
+                int pieces = (head ? 1 : 0) + (chest ? 1 : 0) + (legs ? 1 : 0) + (feet ? 1 : 0);
+                String armor = "⛨ " + pieces + "/4  "
+                        + armorType(p, EquipmentSlot.HEAD) + "/"
+                        + armorType(p, EquipmentSlot.CHEST) + "/"
+                        + armorType(p, EquipmentSlot.LEGS) + "/"
+                        + armorType(p, EquipmentSlot.FEET);
+                Gizmos.billboardTextOverMob(p, row++, armor, 0xFF9CCBFF, 0.53f);
             }
             if (EspSettings.playerDistance) {
-                int meters = (int) Math.round(mc.player.distanceTo(p));
-                Gizmos.billboardTextOverMob(p, textRow, meters + " m", 0xFFFFFFFF, 0.72f);
+                int distance = (int) Math.round(mc.player.distanceTo(p));
+                Gizmos.billboardTextOverMob(p, row, "⌁ " + distance + " м  •  " + p.getName().getString(),
+                        0xFFFFFFFF, 0.62f);
             }
         }
+    }
+
+    private static boolean equipped(AbstractClientPlayer p, EquipmentSlot slot) {
+        return !p.getItemBySlot(slot).isEmpty();
+    }
+
+    private static String armorType(AbstractClientPlayer p, EquipmentSlot slot) {
+        ItemStack item = p.getItemBySlot(slot);
+        if (item.isEmpty()) return "-";
+        String id = BuiltInRegistries.ITEM.getKey(item.getItem()).getPath();
+        if (id.contains("netherite")) return "N";
+        if (id.contains("diamond")) return "D";
+        if (id.contains("iron")) return "I";
+        if (id.contains("chainmail")) return "C";
+        if (id.contains("gold")) return "G";
+        if (id.contains("leather")) return "L";
+        if (id.contains("turtle")) return "T";
+        return "*";
+    }
+
+    /** Contrast outline + colored core; start in front of the eye so the near-plane doesn't clip it. */
+    private static void drawTracer(Vec3 start, Vec3 end, int color, float width) {
+        Gizmos.line(start, end, 0xB02A2238, width + 2.4f).setAlwaysOnTop();
+        Gizmos.line(start, end, color, width).setAlwaysOnTop();
+        Gizmos.point(end, color, 5.0f).setAlwaysOnTop();
     }
 
     private static void drawStorage(Minecraft mc, ClientLevel level) {
         int pcx = mc.player.blockPosition().getX() >> 4;
         int pcz = mc.player.blockPosition().getZ() >> 4;
-        boolean lootOn = Features.LOOT.on();
-        for (int cx = pcx - RANGE_CHUNKS; cx <= pcx + RANGE_CHUNKS; cx++) {
-            for (int cz = pcz - RANGE_CHUNKS; cz <= pcz + RANGE_CHUNKS; cz++) {
-                LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
-                if (chunk == null) continue;
-                for (BlockEntity be : chunk.getBlockEntities().values()) {
-                    int color = colorFor(be);
-                    if (color == 0) continue;
-                    // Уже открытые тобой хранилища — серые
-                    if (lootOn && LootTracker.isLooted(be.getBlockPos())) color = 0xFF777777;
-                    AABB box = new AABB(be.getBlockPos()).inflate(0.002);
-                    Gizmos.cuboid(box, GizmoStyle.stroke(color, LINE_WIDTH)).setAlwaysOnTop();
-                    if (EspSettings.storageTracer) {
-                        Vec3 target = Vec3.atCenterOf(be.getBlockPos());
-                        if (mc.player.getEyePosition().distanceToSqr(target) <= 64.0 * 64.0) {
-                            Gizmos.line(mc.player.getEyePosition(), target, color, 1.25f).setAlwaysOnTop();
-                        }
+        Vec3 eye = mc.player.getEyePosition();
+        if (storageWorld != level) {
+            storageWorld = level;
+            storageTick = 0;
+            scanCx = Integer.MIN_VALUE;
+            scanCz = Integer.MIN_VALUE;
+            nearbyStorage = List.of();
+        }
+        // A cheap position scan every 8 ticks, or instantly on chunk movement.
+        if (storageTick++ % 8 == 0 || scanCx != pcx || scanCz != pcz) {
+            scanCx = pcx;
+            scanCz = pcz;
+            List<net.minecraft.core.BlockPos> posList = new ArrayList<>();
+            for (int cx = pcx - RANGE_CHUNKS; cx <= pcx + RANGE_CHUNKS; cx++) {
+                for (int cz = pcz - RANGE_CHUNKS; cz <= pcz + RANGE_CHUNKS; cz++) {
+                    LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
+                    if (chunk == null) continue;
+                    for (BlockEntity be : chunk.getBlockEntities().values()) {
+                        if (colorFor(be) != 0) posList.add(be.getBlockPos().immutable());
                     }
                 }
+            }
+            posList.sort(Comparator.comparingDouble(pos -> eye.distanceToSqr(Vec3.atCenterOf(pos))));
+            nearbyStorage = posList.size() > 260 ? new ArrayList<>(posList.subList(0, 260)) : posList;
+        }
+
+        boolean lootOn = Features.LOOT.on();
+        Vec3 lineStart = eye.add(mc.player.getLookAngle().scale(1.15));
+        int tracers = 0;
+        for (net.minecraft.core.BlockPos pos : nearbyStorage) {
+            LevelChunk chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+            if (chunk == null) continue; // never draw a cached box for an unloaded chunk
+            BlockEntity be = chunk.getBlockEntity(pos);
+            if (be == null) continue;
+            int color = colorFor(be);
+            if (color == 0) continue;
+            if (lootOn && LootTracker.isLooted(pos)) color = 0xFF888392;
+            Gizmos.cuboid(new AABB(pos).inflate(0.008), GizmoStyle.stroke(color, 2.2f))
+                    .setAlwaysOnTop();
+            Vec3 target = Vec3.atCenterOf(pos);
+            if (EspSettings.storageTracer && tracers < 12 && eye.distanceToSqr(target) <= 64.0 * 64.0
+                    && lineStart.distanceToSqr(target) > 1.0) {
+                drawTracer(lineStart, target, color, 2.3f);
+                tracers++;
             }
         }
     }
@@ -167,9 +254,10 @@ public class StorageEspClient {
     private static int colorFor(BlockEntity be) {
         if (be instanceof TrappedChestBlockEntity)    return 0xFFFF2626; // красный
         if (be instanceof ChestBlockEntity)           return 0xFFFFA619; // оранжевый
-        if (be instanceof EnderChestBlockEntity)      return 0xFFB333FF; // фиолетовый
-        if (be instanceof BarrelBlockEntity)          return 0xFF996633; // коричневый
+        if (be instanceof EnderChestBlockEntity)      return EspSettings.storageEnder ? 0xFFB333FF : 0; // фиолетовый
+        if (be instanceof BarrelBlockEntity)          return EspSettings.storageBarrels ? 0xFFBF8C50 : 0; // коричневый
         if (be instanceof ShulkerBoxBlockEntity shulker) {
+            if (!EspSettings.storageShulkers) return 0;
             DyeColor dye = shulker.getColor();
             return dye != null ? (0xFF000000 | dye.getTextureDiffuseColor()) : 0xFF9966B3;
         }

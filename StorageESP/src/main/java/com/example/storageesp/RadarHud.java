@@ -33,7 +33,7 @@ public class RadarHud {
         double yaw = Math.toRadians(mc.player.getYRot());
 
         for (var p : mc.level.players()) {
-            if (p == mc.player) continue;
+            if (p == mc.player || p.isRemoved() || !p.isAlive() || mc.level.getEntity(p.getId()) != p) continue;
             int color = p.isAlliedTo(mc.player) ? 0xFF55FF55 : 0xFFFF3333;
             plot(g, cx, cy, half, p.position().subtract(me), yaw, color);
         }

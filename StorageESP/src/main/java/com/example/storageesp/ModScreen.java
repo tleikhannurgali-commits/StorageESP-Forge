@@ -55,8 +55,9 @@ public final class ModScreen extends Screen {
     }
 
     private int rowCount() {
-        return settingsFor == Features.PLAYERS ? 3
-                : settingsFor == Features.STORAGE ? 1
+        return settingsFor == Features.PLAYERS ? 4
+                : settingsFor == Features.STORAGE ? 4
+                : settingsFor == Features.MARKS ? 2
                 : GROUPS[activeTab].length;
     }
 
@@ -93,7 +94,7 @@ public final class ModScreen extends Screen {
         rect(g, 33, 17, 9, 36, 5, 0xFFCEBBF6);
         rect(g, 46, 29, 9, 24, 5, 0xFFA58BDC);
         g.drawString(font, "STORAGE ESP", 68, 23, INK, false);
-        g.drawString(font, "FORGE 1.21.11    /    v1.1", 68, 40, MUTED, false);
+        g.drawString(font, "FORGE 1.21.11    /    v1.2", 68, 40, MUTED, false);
         rect(g, 547, 22, 139, 31, 14, 0xD7F7F2FF);
         g.drawCenteredString(font, "VISUAL CONTROL", 616, 33, 0xFF7657A9);
         g.fill(19, 68, W - 19, 69, 0x88FFFFFF);
@@ -134,7 +135,8 @@ public final class ModScreen extends Screen {
             String state = active + " / " + GROUPS[activeTab].length + " ON";
             g.drawString(font, state, CONTENT_X + CONTENT_W - font.width(state) - 13, 91, 0xFF835CC2, false);
         } else {
-            String title = settingsFor == Features.PLAYERS ? "PLAYER ESP" : "STORAGE ESP";
+            String title = settingsFor == Features.PLAYERS ? "PLAYER ESP"
+                    : settingsFor == Features.STORAGE ? "STORAGE ESP" : "MARKS";
             g.drawString(font, "НАСТРОЙКИ  /  " + title, CONTENT_X, 89, INK, false);
             g.drawString(font, "Переключатели сохраняются автоматически", CONTENT_X, 107, MUTED, false);
         }
@@ -165,7 +167,7 @@ public final class ModScreen extends Screen {
         g.drawCenteredString(font, icon(f), CONTENT_X + 33, y + 29, f.on() ? 0xFF7652C2 : MUTED);
         g.drawString(font, name(f), CONTENT_X + 65, y + 16, INK, false);
         g.drawString(font, subtitle(f), CONTENT_X + 65, y + 36, MUTED, false);
-        boolean hasOptions = f == Features.STORAGE || f == Features.PLAYERS;
+        boolean hasOptions = f == Features.STORAGE || f == Features.PLAYERS || f == Features.MARKS;
         if (hasOptions) {
             rect(g, CONTENT_X + CONTENT_W - 179, y + 36, 91, 19, 8, 0xE6E5D9F8);
             g.drawCenteredString(font, "НАСТРОИТЬ", CONTENT_X + CONTENT_W - 134, y + 42, 0xFF7354AC);
@@ -174,23 +176,47 @@ public final class ModScreen extends Screen {
     }
 
     private void drawSetting(GuiGraphics g, int index, int y, double mx, double my) {
-        boolean player = settingsFor == Features.PLAYERS;
-        String label = player ? switch (index) {
-            case 0 -> "Здоровье игроков";
-            case 1 -> "Линии к игрокам";
-            default -> "Дистанция в метрах";
-        } : "Линии к хранилищам";
-        String subtitle = player ? switch (index) {
-            case 0 -> "HP над игроками";
-            case 1 -> "От твоей камеры к игроку";
-            default -> "Расстояние над игроком, м";
-        } : "От камеры к контейнерам до 64 м";
+        String label;
+        String subtitle;
+        String icon;
+        if (settingsFor == Features.PLAYERS) {
+            label = switch (index) {
+                case 0 -> "HP и шкала здоровья";
+                case 1 -> "Контрастные линии";
+                case 2 -> "Дистанция + ник";
+                default -> "Броня H/C/L/B";
+            };
+            subtitle = switch (index) {
+                case 0 -> "Сердце, число и полоска над игроком";
+                case 1 -> "От камеры до центра игрока";
+                case 2 -> "Расстояние в блоках";
+                default -> "Шлем, нагрудник, штаны, ботинки";
+            };
+            icon = switch (index) { case 0 -> "HP"; case 1 -> "LN"; case 2 -> "M"; default -> "AR"; };
+        } else if (settingsFor == Features.STORAGE) {
+            label = switch (index) {
+                case 0 -> "Линии к контейнерам";
+                case 1 -> "Эндер-сундуки";
+                case 2 -> "Бочки";
+                default -> "Шалкеры";
+            };
+            subtitle = switch (index) {
+                case 0 -> "До 12 ближайших контейнеров";
+                case 1 -> "Фиолетовая подсветка";
+                case 2 -> "Коричневая подсветка";
+                default -> "Цвет под тип шалкера";
+            };
+            icon = switch (index) { case 0 -> "LN"; case 1 -> "EN"; case 2 -> "BR"; default -> "SH"; };
+        } else {
+            label = index == 0 ? "Смерти других игроков" : "Последние позиции (призраки)";
+            subtitle = index == 0 ? "Только увиденная клиентом смерть" : "Отдельные голубые метки на 10 секунд";
+            icon = index == 0 ? "DE" : "GH";
+        }
         boolean value = settingValue(index);
         boolean hover = in(mx, my, CONTENT_X, y, CONTENT_W - 14, ROW_H);
         rect(g, CONTENT_X, y, CONTENT_W - 14, ROW_H, 14, hover ? 0xF6FFFFFF : LIGHT);
         rect(g, CONTENT_X + 13, y + 13, 41, 40, 12, 0xC6DDD0F7);
-        g.drawCenteredString(font, player ? index == 0 ? "HP" : index == 1 ? "LN" : "M" : "LN",
-                CONTENT_X + 33, y + 29, 0xFF7458B4);
+        g.drawCenteredString(font, icon, CONTENT_X + 33, y + 29, 0xFF7458B4);
         g.drawString(font, label, CONTENT_X + 65, y + 16, INK, false);
         g.drawString(font, subtitle, CONTENT_X + 65, y + 36, MUTED, false);
         drawSwitch(g, CONTENT_X + CONTENT_W - 76, y + 22, value);
@@ -260,7 +286,7 @@ public final class ModScreen extends Screen {
             }
             Features f = GROUPS[activeTab][i];
             if ((button == 1 || x >= CONTENT_X + CONTENT_W - 185 && x < CONTENT_X + CONTENT_W - 83 && y > rowY + 32)
-                    && (f == Features.PLAYERS || f == Features.STORAGE)) {
+                    && (f == Features.PLAYERS || f == Features.STORAGE || f == Features.MARKS)) {
                 settingsFor = f;
                 resetScroll();
                 return true;
@@ -272,20 +298,39 @@ public final class ModScreen extends Screen {
     }
 
     private boolean settingValue(int i) {
-        if (settingsFor == Features.STORAGE) return EspSettings.storageTracer;
+        if (settingsFor == Features.STORAGE) return switch (i) {
+            case 0 -> EspSettings.storageTracer;
+            case 1 -> EspSettings.storageEnder;
+            case 2 -> EspSettings.storageBarrels;
+            default -> EspSettings.storageShulkers;
+        };
+        if (settingsFor == Features.MARKS) return i == 0 ? EspSettings.markOtherDeaths : EspSettings.markGhosts;
         return switch (i) {
             case 0 -> EspSettings.playerHealth;
             case 1 -> EspSettings.playerTracer;
-            default -> EspSettings.playerDistance;
+            case 2 -> EspSettings.playerDistance;
+            default -> EspSettings.playerArmor;
         };
     }
 
     private void toggleSetting(int i) {
-        if (settingsFor == Features.STORAGE) { EspSettings.storageTracer = !EspSettings.storageTracer; return; }
-        switch (i) {
-            case 0 -> EspSettings.playerHealth = !EspSettings.playerHealth;
-            case 1 -> EspSettings.playerTracer = !EspSettings.playerTracer;
-            default -> EspSettings.playerDistance = !EspSettings.playerDistance;
+        if (settingsFor == Features.STORAGE) {
+            switch (i) {
+                case 0 -> EspSettings.storageTracer = !EspSettings.storageTracer;
+                case 1 -> EspSettings.storageEnder = !EspSettings.storageEnder;
+                case 2 -> EspSettings.storageBarrels = !EspSettings.storageBarrels;
+                default -> EspSettings.storageShulkers = !EspSettings.storageShulkers;
+            }
+        } else if (settingsFor == Features.MARKS) {
+            if (i == 0) EspSettings.markOtherDeaths = !EspSettings.markOtherDeaths;
+            else EspSettings.markGhosts = !EspSettings.markGhosts;
+        } else {
+            switch (i) {
+                case 0 -> EspSettings.playerHealth = !EspSettings.playerHealth;
+                case 1 -> EspSettings.playerTracer = !EspSettings.playerTracer;
+                case 2 -> EspSettings.playerDistance = !EspSettings.playerDistance;
+                default -> EspSettings.playerArmor = !EspSettings.playerArmor;
+            }
         }
     }
 
@@ -326,12 +371,12 @@ public final class ModScreen extends Screen {
         return switch (f) {
             case STORAGE -> "Контейнеры через стены";
             case LOOT -> "Уже открытые сундуки";
-            case WARDEN -> "Сундуки без таймера";
+            case WARDEN -> "Память таймера / без ложной зелени";
             case PRICES -> "Цены предметов на аукционе";
-            case PLAYERS -> "Рамки, здоровье, линии, метры";
+            case PLAYERS -> "HP-бар, броня, ник, линии, метры";
             case ANTI_INVIS -> "Видимость невидимых";
             case RADAR -> "Игроки на мини-карте";
-            case MARKS -> "Метки, призраки, смерть";
+            case MARKS -> "Метки и подтверждённые смерти";
             case VOID_MAP -> "Поиск прямых тоннелей";
             case TRACES -> "Отметки по звукам";
             case FULLBRIGHT -> "Ночное зрение без команд";

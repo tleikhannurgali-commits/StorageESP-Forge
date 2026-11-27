@@ -1,3 +1,5 @@
+# Previous version (historical) - see CHANGES-v1.2.0.txt
+
 StorageESP Forge 1.21.11 | source 1.1.0
 
 Что изменено:

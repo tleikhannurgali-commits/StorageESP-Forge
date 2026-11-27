@@ -1,31 +1,23 @@
-# StorageESP 1.1.0 / Forge Minecraft 1.21.11
+# StorageESP Forge 1.21.11 — v1.2.0
 
-This is SOURCE CODE, not a compiled mod JAR. Built on the previous working
-Forge 61.2.5 project. The previous screen crash fix is retained.
+Updated source project. Forge 61.2.5, Java 21 + Java 25 for ForgeGradle, Gradle 9.5.0.
 
-## Changes
+### Installation / GitHub build
 
-* Responsive ClickGUI: virtual 710 x 470 canvas, scaled to fit any GUI Scale.
-  Both drawing and clicks are transformed to the same coordinates.
-* Scrolling: mouse wheel vertically scrolls the module list; pressing the
-  middle mouse button scrolls down a page and wraps to top at the bottom.
-* Click a module's switch/card to toggle it; **right-click** Player ESP or
-  Storage ESP (or click its "НАСТРОИТЬ" button) to edit its detailed settings.
-* Player ESP options: health (HP label), tracer line, distance in meters.
-* Storage ESP option: tracer line to containers within 64 blocks.
-* Fullbright option under "МИР": client-side Night Vision lighting,
-  not a shader/gamma hack. This can have a different color tone from full gamma.
-* Saved settings in config/storageesp.properties.
+The repository structure is intentional: `.github/workflows/build.yml` at the **repository root**, and mod sources inside `StorageESP/`. Upload the **contents of this ZIP** to the existing `StorageESP-Forge` GitHub repository (same paths, replacing older files). A push to `main` runs GitHub Actions. Download the artifact after a **green** build, unzip, then put the `.jar` in Legacy Launcher Forge 1.21.11 `mods/`, removing the old StorageESP jar.
 
-## Build
+### Changes v1.2
 
-Forge 61.2.5 / Java 21 + JDK 25 for ForgeGradle / Gradle 9.5.0.
-Use the GitHub Actions workflow in .github/workflows/build.yml or BUILD_MOD.cmd.
-The new source has NOT yet been compiled or tested in Minecraft. Do not keep
-both old and new StorageESP jars in mods at the same time.
+- Player ESP: draw only valid, alive, currently loaded players (no boxes for removed/dead entities); restrict render range; neon-style outlined tracers from in front of camera + endpoint, 2.2px boxes.
+- Health: `❤` + current/max HP + 10-segment progress bar, dynamically colored by health.
+- Armor: equipped head/chest/legs/boots and type (N=netherite, D=diamond, I=iron, C=chain, G=gold, L=leather, T=turtle).
+- Player distance + name rendered as separate customizable label.
+- Markers: manual `M`, local death, observed other-player death, optional last-known position in cyan (NOT death). Never guesses death on teleport or chunk unload.
+- Warden: remembers only real client-observed hologram timers (custom names and TextDisplay); estimates countdown while traveling; gray = unknown, red = timer running, green = last observed timer expired. Reloading a chest with a server timer resynchronizes it. No more green on freshly loaded chest with missing timer.
+- Storage: barrels, ender chests, and shulker boxes have independent toggles (all on by default) + configurable tracer. Cached search every 8 ticks, max 260 boxes / 12 tracers.
+- Fix ESP settings now actually being written to `config/storageesp.properties` on save (v1.1 forgot this).
+- The responsive, scrollable GUI from v1.1 remains; Right Ctrl opens it, right-click Player ESP/Storage ESP/Marks to configure.
 
-## GUI / keyboard
+### Limitations and truth in labeling
 
-Right Ctrl: menu; wheel or middle-click: scroll; left-click: toggle;
-right-click on Player ESP / Storage ESP: configure; Esc: close.
-H/J/K/O: old feature hotkeys; M: create mark.
+This project is **not** yet recompiled or runtime-tested in the present environment. GitHub build success only establishes successful compilation, not gameplay correctness. Remote player death is only known when the client sees the player's death state. If the server hides deaths or teleports, it cannot be inferred. The Warden client countdown is approximate: expired timer does not guarantee the server has opened the chest. Chests in never-loaded chunks are unknowable.

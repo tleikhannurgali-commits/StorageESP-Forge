@@ -14,7 +14,7 @@ public enum Features {
     STORAGE("Подсветка хранилищ", true),
     PLAYERS("Подсветка игроков", true),
     ANTI_INVIS("Анти-невидимость", true),
-    WARDEN("Warden: открытые сундуки", true),
+    WARDEN("Warden: запомненные таймеры", true),
     LOOT("Лут-трекер", true),
     RADAR("Радар игроков", true),
     MARKS("Метки (призраки, смерть)", true),
@@ -58,6 +58,7 @@ public enum Features {
     public static void save() {
         Properties props = new Properties();
         for (Features f : values()) props.setProperty(f.name(), Boolean.toString(f.on));
+        EspSettings.save(props);
         try (OutputStream out = Files.newOutputStream(file())) {
             props.store(out, "Storage ESP");
         } catch (IOException ignored) {

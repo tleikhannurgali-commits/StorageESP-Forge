@@ -1,0 +1,6 @@
+StorageESP Forge 1.21.11 v1.2.2
+- Warden remembers observed timers for chests AND barrels.
+- Compact countdown label, 00:33 style; on expiration 00:00.
+- Player ESP HP text smaller with a 6-block bar; concise 4-slot armor abbreviations.
+- Updated mod version metadata.
+Needs GitHub compilation and Minecraft test. These changes do not prove actual server chest opening.

@@ -4,7 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 
-/** Client-only night-vision lighting. No commands, server effects, or permanent gamma edits. */
+/** Client-only stable night-vision lighting (long duration prevents pulsing at <200 ticks). No commands, server effects, or permanent gamma edits. */
 public final class FullbrightController {
     private FullbrightController() {}
 
@@ -25,7 +25,7 @@ public final class FullbrightController {
         if (Features.FULLBRIGHT.on()) {
             // Leave genuine night-vision effects intact; only refresh ours when necessary.
             if (current == null || (appliedByUs && current.getDuration() < 100)) {
-                mc.player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 220, 0, false, false, false));
+                mc.player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 30000, 0, false, false, false));
                 appliedByUs = true;
             }
         } else if (appliedByUs) {

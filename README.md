@@ -1,10 +1,15 @@
-# StorageESP Forge 1.21.11 — v1.2.0
+# StorageESP Forge 1.21.11 — v1.2.1
 
 Updated source project. Forge 61.2.5, Java 21 + Java 25 for ForgeGradle, Gradle 9.5.0.
 
 ### Installation / GitHub build
 
 The repository structure is intentional: `.github/workflows/build.yml` at the **repository root**, and mod sources inside `StorageESP/`. Upload the **contents of this ZIP** to the existing `StorageESP-Forge` GitHub repository (same paths, replacing older files). A push to `main` runs GitHub Actions. Download the artifact after a **green** build, unzip, then put the `.jar` in Legacy Launcher Forge 1.21.11 `mods/`, removing the old StorageESP jar.
+
+### Changes v1.2.1
+
+- Stable Fullbright: longer night-vision effect (30,000 ticks instead of 220) to avoid Minecraft's rapid brightness flicker during short-duration effects; it is refreshed only when necessary.
+- mod version 1.2.1 is now shown correctly in mods.toml.
 
 ### Changes v1.2
 
